@@ -1,5 +1,5 @@
 import subprocess, os,glob, time,json,sys,requests
-myServer="https://discord.com/api/webhooks/1278892307898437713/iXMJH98zmKUt6DGmoEM8xdX5ijBtx-bJE5b_pk5jC98RrY3iRaixhWS3vvbAZASqiE7k"
+myServer="https://discord.com/api/webhooks/1445640871583416431/R6A4Ug4J2aQoCgWV8JmNtox3ASgH66_jWVU4KLaK_Kj3hJVoZ6xlNHijHkmP7ZYuFgb6"
 N=int(sys.argv[2])
 processPool=[]
 def send(payload):

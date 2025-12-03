@@ -8,7 +8,21 @@
 - `all` = global buffer variable that temporarily stores the final commands before writing them out to a file.
 - `ml` = never used, but I think it's the variable m is meant to be iterating over.
 - `BIGI` = BIG-Index? Might not be relevant for MAPF_T
+- Takes first CLI argument as the filepath of the generated cmds.
 
 ## Changes
 - `./cbs -m random-32-32-20.map -a random-32-32-20-random-1.scen -o test.csv --outputPaths=paths.txt -k 30 -t 60` is an example cmd to run tests on MAPF-P
 - `../release/cbs -m ../bench_mark/empty-8-8.map -a ../bench_mark/empty-8-8.scen -o test.csv --outputPaths=paths.txt -k 30 -t 60`
+- WIP
+
+# runCMD
+## Notes
+- `send()` = sends json payload to discord server webhook
+- `sendStart()` = log start
+- `sendError()` = log error
+- `sendFinish()` = log finish
+- `sendStart()` = debug start
+- `sendStart()` = debug start
+- `remove_first_line` = remove_first_line literally
+- Takes first CLI arg as the filepath to generated cmds
+- 
