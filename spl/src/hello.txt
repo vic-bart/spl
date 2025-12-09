@@ -1,0 +1,1 @@
+../release/cbs -m ../bench_mark/empty-8-8/empty-8-8.map -a ../bench_mark/empty-8-8/empty-8-8-random-1.scen -o ../result/empty-8-8-random-1.csv --outputPaths ../result/empty-8-8-random-1.txt -k 1 -t 60
