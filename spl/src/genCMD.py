@@ -40,8 +40,8 @@ for m in ml:
                     exe,
                     "-m",fn_m,
                     "-a",fn_ins,
-                    "-o",f"{rs_folder}{m}-{i_type}-{i}.csv",
-                    "--outputPaths",f"{rs_folder}{m}-{i_type}-{i}.txt",
+                    "-o",f"{rs_folder}{m}-{i_type}-scen-{i}-agents-{k}.csv",
+                    "--outputPaths",f"{rs_folder}{m}-{i_type}-scen-{i}-agents-{k}.txt",
                     "-k",k,
                     "-t",60,
                 ]

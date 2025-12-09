@@ -1,3 +1,4 @@
+from matplotlib import lines
 import subprocess, os,glob, time,json,sys,requests
 myServer="https://discord.com/api/webhooks/1445640871583416431/R6A4Ug4J2aQoCgWV8JmNtox3ASgH66_jWVU4KLaK_Kj3hJVoZ6xlNHijHkmP7ZYuFgb6"
 
@@ -10,31 +11,35 @@ AGENT_NUM_INDEX = 10
 def send(payload):
     response = requests.post(myServer, json=payload)
     if response.ok:
-        print("Message sent successfully!")
+        print("DISCORD: Message sent successfully!")
     else:
-        print(f"Failed to send message: {response.status_code} - {response.text}")
+        print(f"DISCORD: Failed to send message: {response.status_code} - {response.text}")
 
 def sendStart():
-    print("starting Experiement")
+    print("DISCORD: Starting experiment.")
     payload = {
-    #"payload_json": '{"content":"BUG!!!!!!!!!!!!!!!!! FUCK YOU!!!!!!!!!"}'
-    "content":"------------------Starting a New Experiment---------------------"
+    "content":"Starting a new experiment."
     }
     send(payload)
 
 def sendError():
-    print("error")
+    print("DISCORD: Error")
     payload = {
-    #"payload_json": '{"content":"BUG!!!!!!!!!!!!!!!!! FUCK YOU!!!!!!!!!"}'
-    "content":"BUG!!!!!!!!!!!!!!!!! FUCK YOU!!!!!!!!!"
+    "content":"BUG: !!!!!!!!!!!!!!!!! FUCK YOU!!!!!!!!!"
     }
     send(payload)
 
 def sendFinish():
-    print("finished")
+    print("DISCORD: Finished")
     payload = {
-    #"payload_json": '{"content":"Experiement finished without bug, hopefully"}'
-    "content":"Experiement finished without bug, hopefully"
+    "content":"Experiment finished without bug, hopefully"
+    }
+    send(payload)
+
+def sendNoSolution():
+    print("DISCORD: No solution")
+    payload = {
+    "content":"NO SOLUTION: Experiment found no solution."
     }
     send(payload)
 
@@ -63,6 +68,7 @@ with open(sys.argv[1],"r") as f:
     CMDPOOL=[l for l in f]
 
 errors=[]
+no_solutions=[]
 sendStart()
 
 levels: dict[str|dict[int|list[str]]] = {} # map -> k -> list of cmds for each scenario
@@ -81,17 +87,14 @@ for data in CMDPOOL:
         levels[cur_map] = {}
         is_level_in_pool[cur_map] = {}
 
-    
     if cur_k not in levels[cur_map]:
         levels[cur_map][cur_k] = []
         is_level_in_pool[cur_map][cur_k] = False
 
-
-
     levels[cur_map][cur_k].append(cmd)
 
 for map_name, ks in levels.items():
-    print("Running experiments for map:", map_name)
+    print("RUN_CMD: Running experiments for map", map_name)
     for k, cmds in ks.items():
         print("  Number of agents:", k)
         print(f"    Running {len(cmds)} commands:")
@@ -105,7 +108,7 @@ while waiting_cmds or current_processes:
     # Start new processes if we have capacity
     while len(current_processes) < N and waiting_cmds:
         cmd = waiting_cmds.pop()
-        print("Starting command:", subprocess.list2cmdline(cmd))
+        print("RUN_CMD: Starting command", subprocess.list2cmdline(cmd))
         process = subprocess.Popen(cmd)
         current_processes[process.pid] = (process, cmd)
 
@@ -114,16 +117,21 @@ while waiting_cmds or current_processes:
     for pid, (process, cmd) in current_processes.items():
         result = process.poll()
         if result is not None:  # Process has finished
-            if result != 0:
+            if result == 2:
+                sendNoSolution()
+                print("RUN_CMD: NO SOLUTION")
+                print("RUN_CMD: No solution found for command", subprocess.list2cmdline(cmd))
+                no_solutions.append(' '.join(cmd))
+            elif result != 0:
                 sendError()
-                print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-                print("Failed command:", subprocess.list2cmdline(cmd))
+                print("RUN_CMD: ERROR")
+                print("RUN_CMD: Failed command", subprocess.list2cmdline(cmd))
                 errors.append(' '.join(cmd))
             finished_pids.append(pid)
 
     # Remove finished processes from the current pool
     for pid in finished_pids:
-        print("Finishing command:", subprocess.list2cmdline(current_processes[pid][1]))
+        print("RUN_CMD: Finishing command", subprocess.list2cmdline(current_processes[pid][1]))
         del current_processes[pid]
 
 
@@ -179,7 +187,10 @@ while waiting_cmds or current_processes:
 #     #data=remove_first_line('./errors.txt', './errors.txt')
 
 
-# sendFinish()
-# if errors:
-#     with open("erros.txt",'w') as f:
-#         [print(i) for i in errors]
+sendFinish()
+if errors:
+    with open("errors.txt",'w') as f:
+        [f.write("%s\n" % l) for l in errors]
+if no_solutions:
+    with open("no_solutions.txt",'w') as f:
+        [f.write("%s\n" % l) for l in no_solutions]
