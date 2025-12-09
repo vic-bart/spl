@@ -1,0 +1,8 @@
+digraph G {
+size = "5,5";
+center = true;
+1 [label="#1
+g+h=33+0
+d=0"]
+1 [color=red]
+}

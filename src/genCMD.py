@@ -1,4 +1,25 @@
 import sys
+def getTimeout(fn_m):
+    i = 0
+    height = 0
+    width = 0
+
+    try:
+        with open(fn_m, 'r') as file:
+            for line in file:
+                if i == 0:
+                    pass
+                elif i == 1:
+                    height = int(line.split()[-1])
+                elif i == 2:
+                    width = int(line.split()[-1])
+                else:
+                    return (3*60) if (height*width>1000) else (60)
+                i += 1
+    except FileNotFoundError:
+        print(f"The file '{fn_m}' does not exist.")
+        return None
+
 exe="../release/cbs"
 fn_folder="../bench_mark/"
 rs_folder="../result/"
@@ -19,8 +40,8 @@ for m in ml:
                     exe,
                     "-m",fn_m,
                     "-a",fn_ins,
-                    "-o",f"{rs_folder}{m}/{m}-{i_type}-{i}.csv",
-                    "--outputPaths",f"{rs_folder}{m}/{m}-{i_type}-{i}.txt",
+                    "-o",f"{rs_folder}{m}-{i_type}-{i}.csv",
+                    "--outputPaths",f"{rs_folder}{m}-{i_type}-{i}.txt",
                     "-k",k,
                     "-t",60,
                 ]
