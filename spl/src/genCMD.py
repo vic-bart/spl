@@ -9,6 +9,7 @@ FN_FOLDER="../bench_mark/"
 RS_FOLDER="../result/"
 ML=[
     "empty-8-8",
+    # "Berlin_1_256",
 ]
 
 # Global variables

@@ -3,7 +3,7 @@ import subprocess, os,glob, time,json,sys,requests,math
 
 # Global constants
 DISCORD_SERVER="https://discord.com/api/webhooks/1445640871583416431/R6A4Ug4J2aQoCgWV8JmNtox3ASgH66_jWVU4KLaK_Kj3hJVoZ6xlNHijHkmP7ZYuFgb6"
-N=min(8, int(sys.argv[2]))  # Max 8 because the bus only has ~8 data lines, so >8 processes means waiting on data lines to be free means the processes slow down x10000 ~ Andy
+N=int(sys.argv[2])  # Max 8 because the bus only has ~8 data lines, so >8 processes means waiting on data lines to be free means the processes slow down x10000 ~ Andy
 MAP_INDEX = 2
 SCENARIO_INDEX = 4
 AGENT_NUM_INDEX = 10
@@ -23,8 +23,19 @@ errors=[]
 no_solutions=[]
 
 time_last_debug=0
+time_start=time.time()
 
 def sendDiscord(msg):
+    # This API limits messages to 2000 characters.
+    while len(msg) > 2000:
+        payload = {"content": msg[:2000]}
+        response = requests.post(DISCORD_SERVER, json=payload)
+        if response.ok:
+            print(f"[DISCORD] Sent message: {msg[:2000]}")
+        else:
+            print(f"[DISCORD] Failed to send message: {msg}\n{response.status_code} - {response.text}")
+        msg = msg[2000:]
+
     payload = {"content": msg}
     response = requests.post(DISCORD_SERVER, json=payload)
     if response.ok:
@@ -33,34 +44,35 @@ def sendDiscord(msg):
         print(f"[DISCORD] Failed to send message: {msg}\n{response.status_code} - {response.text}")
 
 def debug():
-    global time_last_debug
-    if (time.time() - time_last_debug) < DEBUG_PERIOD:
-        return
-    else:
-        time_last_debug = time.time()
     l = ""
     for map_name, ks in cmd_states.items():
+        l += f"{map_name.upper()}\n"
         for k, cmds in ks.items():
 
             # Get number of solved commands and state of level
-            count = 0
+            waiting = True
+            failed = True
             solved = 0
             for cmd in cmds:
+                if cmds[cmd] != 1:
+                    waiting = False
+                if cmds[cmd] != 2:
+                    failed = False
                 if cmds[cmd] == 0:
                     solved += 1
-                count += cmds[cmd]
 
-            if count == len(cmds):  # All cmds waiting
+            if waiting:  # All cmds waiting
                 e = "⏱️"
-            elif count == (2 * len(cmds)):  # All cmds found no solution
+            elif failed:  # All cmds found no solution
                 e = "❌"
             else:   # At least one cmd solved
                 e = "✅"
 
-            l += f"{k}={e}({solved}/{len(cmds)}), "
-        print(f"{map_name.upper()}\n{l[:-2]}")
+            l += f"{k}={e} ({solved}/{len(cmds)}), "
+        l = f"{l[:-2]}\n\n"
+    return l
 
-# sendDiscord("[DISCORD] Starting experiment.")
+sendDiscord("[DISCORD] Starting experiment.")
 
 # Generate commands
 for data in CMDPOOL:
@@ -74,34 +86,43 @@ for data in CMDPOOL:
         levels[cur_map] = {}
         is_level_in_pool[cur_map] = {}
         cmd_states[cur_map] = {}
-        highest_k_solved[cur_map] = 0
+        highest_k_solved[cur_map] = float('inf')
 
     if cur_k not in levels[cur_map]:
         levels[cur_map][cur_k] = []
         is_level_in_pool[cur_map][cur_k] = False
         cmd_states[cur_map][cur_k] = {}
+        highest_k_solved[cur_map] = min(highest_k_solved[cur_map], cur_k)
 
     levels[cur_map][cur_k].append(cmd)
     cmd_states[cur_map][cur_k][cmd] = 1
     
 # Debug
-debug()
 # for map_name, ks in levels.items():
 #     print("[RUN_CMD] Running experiments for map", map_name)
 #     for k, cmds in ks.items():
 #         print("  Number of agents:", k)
 #         print(f"    Running {len(cmds)} commands:")
+print(debug())
+sendDiscord(debug())
 
 # Initialise command pool
 for map_name in levels.keys():
     min_k = highest_k_solved[map_name]
     max_k = highest_k_solved[map_name] + CONSECUTIVE_FAILURES
-    for k in range(min_k + 1, max_k + 1):
-        cmds = levels[map_name][k]
-        waiting_cmds.update(cmds)
+    for k in range(min_k, max_k + 1):
+        try:
+            cmds = levels[map_name][k]
+            waiting_cmds.update(cmds)
+        except:
+            break
 
 while waiting_cmds or current_processes:
-    debug()
+    if (time.time() - time_last_debug) < DEBUG_PERIOD:
+        pass
+    else:
+        time_last_debug = time.time()
+        print(debug())
     
     # Start new processes if we have capacity
     while len(current_processes) < N and waiting_cmds:
@@ -120,12 +141,12 @@ while waiting_cmds or current_processes:
             fin_k = int(cmd[AGENT_NUM_INDEX])
             if result == 2: # Solution was not found
                 # sendDiscord("[DISCORD] NO SOLUTION: Experiment found no solution.")
-                # print("[RUN_CMD] NO SOLUTION: No solution found for command", subprocess.list2cmdline(cmd))
+                print("[RUN_CMD] NO SOLUTION: No solution found for command", subprocess.list2cmdline(cmd))
                 no_solutions.append(' '.join(cmd))
                 cmd_states[fin_map][fin_k][cmd] = 2
             elif result != 0:
-                # sendDiscord("[DISCORD] BUG: !!!!!!!!!!!!!!!!! FUCK YOU!!!!!!!!!")
-                # print("[RUN_CMD] ERROR: Failed command", subprocess.list2cmdline(cmd))
+                sendDiscord("[DISCORD] BUG: !!!!!!!!!!!!!!!!! FUCK YOU!!!!!!!!!")
+                print("[RUN_CMD] ERROR: Failed command", subprocess.list2cmdline(cmd))
                 errors.append(' '.join(cmd))
             else:   # Solution was found
                 cmd_states[fin_map][fin_k][cmd] = 0
@@ -139,40 +160,45 @@ while waiting_cmds or current_processes:
         del current_processes[pid]
 
     # Check for consecutive failures
-    try:
-        for map_name in levels.keys():
-            map_failed = True
-            min_k = highest_k_solved[map_name]
-            max_k = highest_k_solved[map_name] + CONSECUTIVE_FAILURES
-            for k in range(min_k + 1, max_k + 1):
+    for map_name in levels.keys():
+        map_failed = True
+        min_k = highest_k_solved[map_name]
+        max_k = highest_k_solved[map_name] + CONSECUTIVE_FAILURES
+        for k in range(min_k + 1, max_k + 1):
+            try:
                 if not map_failed:
                     break
                 for cmd, cmd_state in cmd_states[map_name][k].items():
                     if cmd_state != 2:
                         map_failed = False
                         break
+            except:
+                map_failed = False
+                break
         if map_failed:
-            # sendDiscord("[DISCORD] FAILURE: Experiment exceeded consecutive failures.")
-            # print("[RUN_CMD] FAILURE")
-            # print(f"[RUN_CMD] Consecutive failures exceeded for map {map_name} with {k} agents.")
+            sendDiscord("[DISCORD] FAILURE: Experiment exceeded consecutive failures.")
+            print(f"[RUN_CMD] FAILURE: Consecutive failures exceeded for map {map_name} with {k} agents.")
             for k in is_level_in_pool[map_name].keys():
                 is_level_in_pool[map_name][k] = True
-    except:
-        pass
 
     # Add new processes for levels that have not been solved and exist within the consecutive failure limit
     for map_name in levels.keys():
         min_k = highest_k_solved[map_name]
         max_k = highest_k_solved[map_name] + CONSECUTIVE_FAILURES
         for k in range(min_k + 1, max_k + 1):
-            if not is_level_in_pool[map_name][k]:
-                cmds = levels[map_name][k]
-                waiting_cmds.update(cmds)
-                is_level_in_pool[map_name][k] = True
+            try:
+                if not is_level_in_pool[map_name][k]:
+                    cmds = levels[map_name][k]
+                    waiting_cmds.update(cmds)
+                    is_level_in_pool[map_name][k] = True
+            except:
+                break
 
 time.sleep(1)   # Wait to allow process terminal output to finish
-debug()
-# sendDiscord("[DISCORD] Experiment finished without bug, hopefully.")
+print(debug())
+print(time.time()-time_start)
+sendDiscord("[DISCORD] Experiment finished without bug, hopefully.")
+sendDiscord(debug())
 
 if errors:
     with open("errors.txt",'w') as f:
