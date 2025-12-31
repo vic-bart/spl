@@ -10,13 +10,12 @@ AGENT_NUM_INDEX = 10
 CONSECUTIVE_FAILURES = 2
 with open(sys.argv[1],"r") as f:
     CMDPOOL=[l for l in f]
-DEBUG_PERIOD=1 # in seconds
+DEBUG_PERIOD=1800 # in seconds
 
 # Global variables
-levels: dict[str|dict[int|list[str]]] = {} # dict[map] -> dict[k] -> list[cmds for each scenario]
-highest_k_solved: dict[str|int] = {} # dict[map] -> k of highest level solved
+instances: dict[str|dict[int|list[str]]] = {} # dict[map] -> dict[k] -> dict[scenario] -> status[0=solved,1=error,2=no solution,3=waiting]
 is_level_in_pool: dict[str|dict[int|bool]] = {} # dict[map] -> dict[k] -> is level in pool
-cmd_states: dict[str|dict[int|dict[tuple[str]|int]]] = {} # dict[map] -> dict[k] -> dict[cmd] -> command status, 0:solved, 1:waiting, 2:no solution
+highest_k_solved: dict[str|int] = {} # dict[map] -> k of highest level solved
 waiting_cmds = set()
 current_processes = {}
 errors=[]
@@ -30,6 +29,7 @@ def sendDiscord(msg):
     while len(msg) > 2000:
         payload = {"content": msg[:2000]}
         response = requests.post(DISCORD_SERVER, json=payload)
+        time.sleep(3) # Delay to avoid being rate limited by the API
         if response.ok:
             print(f"[DISCORD] Sent message: {msg[:2000]}")
         else:
@@ -44,161 +44,144 @@ def sendDiscord(msg):
         print(f"[DISCORD] Failed to send message: {msg}\n{response.status_code} - {response.text}")
 
 def debug():
-    l = ""
-    for map_name, ks in cmd_states.items():
-        l += f"{map_name.upper()}\n"
+    s = ""
+    for map_name, ks in instances.items():
+        s += f"{map_name.split('/')[2].upper()}\n"
         for k, cmds in ks.items():
-
-            # Get number of solved commands and state of level
             waiting = True
             failed = True
             solved = 0
-            for cmd in cmds:
-                if cmds[cmd] != 1:
-                    waiting = False
-                if cmds[cmd] != 2:
-                    failed = False
-                if cmds[cmd] == 0:
+            for _, status in cmds.items():
+                if status == 0:
                     solved += 1
-
-            if waiting:  # All cmds waiting
+                if status != 3:
+                    waiting = False
+                if status != 2:
+                    failed = False
+            if waiting:         # All cmds waiting
                 e = "⏱️"
-            elif failed:  # All cmds found no solution
+            elif failed:        # All cmds found no solution
                 e = "❌"
-            else:   # At least one cmd solved
+            elif solved > 0:    # At least one cmd solved
                 e = "✅"
+            s += f"{k}={e} ({solved}/{len(cmds)}), "
+        s = f"{s[:-2]}\n\n"
+    return s
 
-            l += f"{k}={e} ({solved}/{len(cmds)}), "
-        l = f"{l[:-2]}\n\n"
-    return l
+def is_map_failed(map_name) -> bool:
+    l = highest_k_solved[map_name]
+    r = min(l + CONSECUTIVE_FAILURES, max(instances[map_name].keys()))
+    for k in range(l + 1, r + 1):
+        for _, status in instances[map_name][k].items():
+            if status != 2:
+                return False
+    return True
 
-sendDiscord("[DISCORD] Starting experiment.")
+def create_cmds() -> None:
+    for data in CMDPOOL:
+        cmd = tuple(data.strip().split(" "))
+        map_name = cmd[MAP_INDEX]
+        k = int(cmd[AGENT_NUM_INDEX])
 
-# Generate commands
-for data in CMDPOOL:
-    cmd = data.strip().split(" ")
-    cmd = tuple(cmd)
-    cur_map = cmd[MAP_INDEX]
-    cur_scenario = cmd[SCENARIO_INDEX]
-    cur_k = int(cmd[AGENT_NUM_INDEX])
+        if map_name not in instances:
+            instances[map_name] = {}
+            is_level_in_pool[map_name] = {}
+            highest_k_solved[map_name] = 0
 
-    if cur_map not in levels:
-        levels[cur_map] = {}
-        is_level_in_pool[cur_map] = {}
-        cmd_states[cur_map] = {}
-        highest_k_solved[cur_map] = float('inf')
+        if k not in instances[map_name]:
+            instances[map_name][k] = {}
+            is_level_in_pool[map_name][k] = False
 
-    if cur_k not in levels[cur_map]:
-        levels[cur_map][cur_k] = []
-        is_level_in_pool[cur_map][cur_k] = False
-        cmd_states[cur_map][cur_k] = {}
-        highest_k_solved[cur_map] = min(highest_k_solved[cur_map], cur_k)
+        if cmd not in instances[map_name][k]:
+            instances[map_name][k][cmd] = 3
 
-    levels[cur_map][cur_k].append(cmd)
-    cmd_states[cur_map][cur_k][cmd] = 1
-    
-# Debug
-# for map_name, ks in levels.items():
-#     print("[RUN_CMD] Running experiments for map", map_name)
-#     for k, cmds in ks.items():
-#         print("  Number of agents:", k)
-#         print(f"    Running {len(cmds)} commands:")
-print(debug())
-sendDiscord(debug())
+def create_pool() -> None:
+    for map_name in instances.keys():
+        l = highest_k_solved[map_name]
+        r = min(l + CONSECUTIVE_FAILURES, max(instances[map_name].keys()))
+        for k in range(l + 1, r + 1):
+            for cmd in instances[map_name][k].keys():
+                waiting_cmds.update([cmd])
 
-# Initialise command pool
-for map_name in levels.keys():
-    min_k = highest_k_solved[map_name]
-    max_k = highest_k_solved[map_name] + CONSECUTIVE_FAILURES
-    for k in range(min_k, max_k + 1):
-        try:
-            cmds = levels[map_name][k]
-            waiting_cmds.update(cmds)
-        except:
-            break
+def update_pool() -> None:
+    for map_name in instances.keys():
 
-while waiting_cmds or current_processes:
-    if (time.time() - time_last_debug) < DEBUG_PERIOD:
-        pass
-    else:
-        time_last_debug = time.time()
-        print(debug())
-    
-    # Start new processes if we have capacity
+        if highest_k_solved[map_name] == max(instances[map_name].keys()):
+            continue
+
+        l = highest_k_solved[map_name]
+        r = min(l + CONSECUTIVE_FAILURES, max(instances[map_name].keys()))
+        for k in range(l + 1, r + 1):
+            if not is_level_in_pool[map_name][k]:
+                for cmd in instances[map_name][k].keys():
+                    waiting_cmds.update([cmd])
+                is_level_in_pool[map_name][k] = True
+
+def run_pool() -> None:
     while len(current_processes) < N and waiting_cmds:
         cmd = waiting_cmds.pop()
         # print("[RUN_CMD] Starting command", subprocess.list2cmdline(cmd))
         process = subprocess.Popen(cmd)
         current_processes[process.pid] = (process, cmd)
 
-    # Check for finished processes
+def check_pool() -> None:
     finished_pids = []
     for pid, (process, cmd) in current_processes.items():
         result = process.poll()
-        if result is not None:  # Process has finished
-            fin_map = cmd[MAP_INDEX]
-            fin_scenario = cmd[SCENARIO_INDEX]
-            fin_k = int(cmd[AGENT_NUM_INDEX])
-            if result == 2: # Solution was not found
-                # sendDiscord("[DISCORD] NO SOLUTION: Experiment found no solution.")
-                print("[RUN_CMD] NO SOLUTION: No solution found for command", subprocess.list2cmdline(cmd))
+        if result is not None:                      # Process has finished
+            map_name = cmd[MAP_INDEX]
+            k = int(cmd[AGENT_NUM_INDEX])
+            if result == 0:                         # Solved
+                instances[map_name][k][cmd] = 0
+                highest_k_solved[map_name] = max(highest_k_solved[map_name], k)
+                # print("[RUN_CMD] Solved", subprocess.list2cmdline(current_processes[pid][1]))
+            elif result == 2:                       # Not solved
+                instances[map_name][k][cmd] = 2
                 no_solutions.append(' '.join(cmd))
-                cmd_states[fin_map][fin_k][cmd] = 2
-            elif result != 0:
-                sendDiscord("[DISCORD] BUG: !!!!!!!!!!!!!!!!! FUCK YOU!!!!!!!!!")
-                print("[RUN_CMD] ERROR: Failed command", subprocess.list2cmdline(cmd))
+                # print("[RUN_CMD] Not solved", subprocess.list2cmdline(current_processes[pid][1]))
+            else:                                   # Bug
+                instances[map_name][k][cmd] = 1
                 errors.append(' '.join(cmd))
-            else:   # Solution was found
-                cmd_states[fin_map][fin_k][cmd] = 0
-                highest_k_solved[fin_map] = max(highest_k_solved[fin_map], fin_k)
-                pass
+                sendDiscord(f"[DISCORD] BUG: !!!!!!!!!!!!!!!!! FUCK YOU!!!!!!!!! {subprocess.list2cmdline(cmd)}")
+                # print("[RUN_CMD] ERROR: Failed", subprocess.list2cmdline(cmd))
             finished_pids.append(pid)
-
-    # Remove finished processes from the current pool
     for pid in finished_pids:
-        # print("[RUN_CMD] Finishing command", subprocess.list2cmdline(current_processes[pid][1]))
         del current_processes[pid]
 
-    # Check for consecutive failures
-    for map_name in levels.keys():
-        map_failed = True
-        min_k = highest_k_solved[map_name]
-        max_k = highest_k_solved[map_name] + CONSECUTIVE_FAILURES
-        for k in range(min_k + 1, max_k + 1):
-            try:
-                if not map_failed:
-                    break
-                for cmd, cmd_state in cmd_states[map_name][k].items():
-                    if cmd_state != 2:
-                        map_failed = False
-                        break
-            except:
-                map_failed = False
-                break
-        if map_failed:
-            sendDiscord("[DISCORD] FAILURE: Experiment exceeded consecutive failures.")
-            print(f"[RUN_CMD] FAILURE: Consecutive failures exceeded for map {map_name} with {k} agents.")
-            for k in is_level_in_pool[map_name].keys():
-                is_level_in_pool[map_name][k] = True
+create_cmds()
+create_pool()
 
-    # Add new processes for levels that have not been solved and exist within the consecutive failure limit
-    for map_name in levels.keys():
-        min_k = highest_k_solved[map_name]
-        max_k = highest_k_solved[map_name] + CONSECUTIVE_FAILURES
-        for k in range(min_k + 1, max_k + 1):
-            try:
-                if not is_level_in_pool[map_name][k]:
-                    cmds = levels[map_name][k]
-                    waiting_cmds.update(cmds)
-                    is_level_in_pool[map_name][k] = True
-            except:
-                break
+print(debug())
+sendDiscord("[DISCORD] Starting experiment.")
+sendDiscord(debug())
 
+# Loop
+while waiting_cmds or current_processes:
+    
+    run_pool()      # Start new processes if we have capacity
+    check_pool()    # Check for finished processes
+
+    for map_name in instances.keys():   # Check for consecutive failures
+        if is_map_failed(map_name):
+            sendDiscord(f"[DISCORD] FAILURE: {map_name} exceeded consecutive failures.")
+            # print(f"[RUN_CMD] FAILURE: Consecutive failures exceeded for map {map_name} with {k} agents.")
+            highest_k_solved[map_name] = max(instances[map_name].keys())
+
+    update_pool()   # Add new processes for levels that have not been solved and exist within the consecutive failure limit
+
+    # Debug
+    if (time.time() - time_last_debug) < DEBUG_PERIOD:
+        pass
+    else:
+        time_last_debug = time.time()
+        print(debug())
+
+# Debug
 time.sleep(1)   # Wait to allow process terminal output to finish
 print(debug())
-print(time.time()-time_start)
 sendDiscord("[DISCORD] Experiment finished without bug, hopefully.")
 sendDiscord(debug())
+print(time.time()-time_start)
 
 if errors:
     with open("errors.txt",'w') as f:
