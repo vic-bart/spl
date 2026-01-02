@@ -18,6 +18,7 @@ is_level_in_pool: dict[str|dict[int|bool]] = {} # dict[map] -> dict[k] -> is lev
 highest_k_solved: dict[str|int] = {} # dict[map] -> k of highest level solved
 waiting_cmds = set()
 current_processes = {}
+current_maps = []
 errors=[]
 no_solutions=[]
 
@@ -69,6 +70,8 @@ def debug():
     return s
 
 def is_map_failed(map_name) -> bool:
+    if map_name not in current_maps:
+        return False
     l = highest_k_solved[map_name]
     r = min(l + CONSECUTIVE_FAILURES, max(instances[map_name].keys()))
     for k in range(l + 1, r + 1):
@@ -87,6 +90,7 @@ def create_cmds() -> None:
             instances[map_name] = {}
             is_level_in_pool[map_name] = {}
             highest_k_solved[map_name] = 0
+            current_maps.append(map_name)
 
         if k not in instances[map_name]:
             instances[map_name][k] = {}
@@ -134,6 +138,8 @@ def check_pool() -> None:
             if result == 0:                         # Solved
                 instances[map_name][k][cmd] = 0
                 highest_k_solved[map_name] = max(highest_k_solved[map_name], k)
+                if (highest_k_solved[map_name] == max(instances[map_name].keys())) and (map_name in current_maps):
+                    current_maps.remove(map_name)
                 # print("[RUN_CMD] Solved", subprocess.list2cmdline(current_processes[pid][1]))
             elif result == 2:                       # Not solved
                 instances[map_name][k][cmd] = 2
@@ -163,9 +169,10 @@ while waiting_cmds or current_processes:
 
     for map_name in instances.keys():   # Check for consecutive failures
         if is_map_failed(map_name):
+            current_maps.remove(map_name)
+            highest_k_solved[map_name] = max(instances[map_name].keys()) # So further of its instances don't get added to waiting_cmds in update_pool()
             sendDiscord(f"[DISCORD] FAILURE: {map_name} exceeded consecutive failures.")
             # print(f"[RUN_CMD] FAILURE: Consecutive failures exceeded for map {map_name} with {k} agents.")
-            highest_k_solved[map_name] = max(instances[map_name].keys())
 
     update_pool()   # Add new processes for levels that have not been solved and exist within the consecutive failure limit
 
