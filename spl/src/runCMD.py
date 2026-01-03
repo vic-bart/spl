@@ -50,22 +50,27 @@ def debug():
         s += f"{map_name.split('/')[2].upper()}\n"
         for k, cmds in ks.items():
             waiting = True
-            failed = True
+            failed = 0
             solved = 0
             for _, status in cmds.items():
                 if status == 0:
                     solved += 1
                 if status != 3:
                     waiting = False
-                if status != 2:
-                    failed = False
-            if waiting:         # All cmds waiting
+                if status == 2:
+                    failed += 1
+            e = "⏳"
+            if waiting:                 # All cmds waiting
                 e = "⏱️"
-            elif failed:        # All cmds found no solution
+            elif failed == len(cmds):   # All cmds found no solution
                 e = "❌"
-            elif solved > 0:    # At least one cmd solved
+            elif solved > 0:            # At least one cmd solved
                 e = "✅"
-            s += f"{k}={e} ({solved}/{len(cmds)}), "
+
+            if failed > 0:
+                s += f"{k}={e} (({solved}+{failed})/{len(cmds)}), "
+            else:
+                s += f"{k}={e} ({solved}/{len(cmds)}), "
         s = f"{s[:-2]}\n\n"
     return s
 
