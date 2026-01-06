@@ -2,4 +2,6 @@ bench_mark/*
 **.dot
 **/cmd.txt
 **/result
+**/**.zip
+**/old_result
 **/cbs
