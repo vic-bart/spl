@@ -1,2 +1,5 @@
 bench_mark/*
 **.dot
+**/cmd.txt
+**/result
+**/cbs

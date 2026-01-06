@@ -1,4 +1,3 @@
-import sys
 import glob
 # Global constants
 RS_FOLDER="../result/37/"

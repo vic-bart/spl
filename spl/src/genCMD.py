@@ -43,9 +43,10 @@ ML=[
     "room-64-64-8",
     "warehouse-20-40-10-2-2",
 ]
+CMD_FILE=sys.argv[1]
 
 # Global variables
-all=[]
+cmds=[]
 
 def getTimeout(fn_m):
     height = 0
@@ -89,7 +90,7 @@ for m in ML:
                     "-k",k,
                     "-t",getTimeout(fn_m),
                 ]
-                all.append(cmd)
+                cmds.append(cmd)
 
-with open(sys.argv[1],"w") as f:
-    [print(*i,file=f) for i in all]
+with open(CMD_FILE,"w") as f:
+    [print(*i,file=f) for i in cmds]

@@ -1,16 +1,16 @@
-from matplotlib import lines
-import subprocess, os,glob, time,json,sys,requests,math
+import subprocess,time,sys,requests,shutil
 
 # Global constants
 DISCORD_SERVER="***REMOVED***"
 N=int(sys.argv[2])  # Max 8 because the bus only has ~8 data lines, so >8 processes means waiting on data lines to be free means the processes slow down x10000 ~ Andy
-MAP_INDEX = 2
-SCENARIO_INDEX = 4
-AGENT_NUM_INDEX = 10
-CONSECUTIVE_FAILURES = 2
+MAP_INDEX=2
+SCENARIO_INDEX=4
+AGENT_NUM_INDEX=10
+CONSECUTIVE_FAILURES=2
 with open(sys.argv[1],"r") as f:
     CMDPOOL=[l for l in f]
 DEBUG_PERIOD=1800 # in seconds
+MINIMUM_DISK_SPACE=1073741824 # in B, 1 GiB
 
 # Global variables
 instances: dict[str|dict[int|list[str]]] = {} # dict[map] -> dict[k] -> dict[scenario] -> status[0=solved,1=error,2=no solution,3=waiting]
@@ -94,7 +94,6 @@ def create_cmds() -> None:
         if map_name not in instances:
             instances[map_name] = {}
             is_level_in_pool[map_name] = {}
-            highest_k_solved[map_name] = 0
             current_maps.append(map_name)
 
         if k not in instances[map_name]:
@@ -103,6 +102,9 @@ def create_cmds() -> None:
 
         if cmd not in instances[map_name][k]:
             instances[map_name][k][cmd] = 3
+    
+    for map_name in instances.keys():
+        highest_k_solved[map_name] = min(instances[map_name].keys()) - 1
 
 def create_pool() -> None:
     for map_name in instances.keys():
@@ -159,11 +161,17 @@ def check_pool() -> None:
     for pid in finished_pids:
         del current_processes[pid]
 
+def check_disk() -> None:
+    _, _, free = shutil.disk_usage("/")
+    if free < MINIMUM_DISK_SPACE:
+        sendDiscord("Disk space exceeded!")
+        raise Exception("Disk space exceeded!")
+
 create_cmds()
 create_pool()
 
 print(debug())
-sendDiscord("[DISCORD] Starting experiment.")
+sendDiscord("Starting experiment.")
 sendDiscord(debug())
 
 # Loop
@@ -187,11 +195,13 @@ while waiting_cmds or current_processes:
     else:
         time_last_debug = time.time()
         print(debug())
+    
+    check_disk()
 
 # Debug
 time.sleep(1)   # Wait to allow process terminal output to finish
 print(debug())
-sendDiscord("[DISCORD] Experiment finished without bug, hopefully.")
+sendDiscord("Experiment finished without bug, hopefully.")
 sendDiscord(debug())
 print(time.time()-time_start)
 
