@@ -247,28 +247,31 @@ create_pool()
 print(debug())
 
 # Loop
-while waiting_cmds or current_processes:
-    
-    run_pool()      # Start new processes if we have capacity
-    check_pool()    # Check for finished processes
+try: 
+    while waiting_cmds or current_processes:
+        
+        run_pool()      # Start new processes if we have capacity
+        check_pool()    # Check for finished processes
 
-    for map_name in instances.keys():   # Check for consecutive failures
-        if is_map_failed(map_name):
-            current_maps.remove(map_name)
-            highest_k_solved[map_name] = max(instances[map_name].keys()) # So further of its instances don't get added to waiting_cmds in update_pool()
-            # sendDiscord(f"FAILURE: {map_name} exceeded consecutive failures.")
-            print(f"[RUN_CMD] FAILURE: {map_name} exceeded consecutive failures.")
+        for map_name in instances.keys():   # Check for consecutive failures
+            if is_map_failed(map_name):
+                current_maps.remove(map_name)
+                highest_k_solved[map_name] = max(instances[map_name].keys()) # So further of its instances don't get added to waiting_cmds in update_pool()
+                # sendDiscord(f"FAILURE: {map_name} exceeded consecutive failures.")
+                print(f"[RUN_CMD] FAILURE: {map_name} exceeded consecutive failures.")
 
-    update_pool()   # Add new processes for levels that have not been solved and exist within the consecutive failure limit
+        update_pool()   # Add new processes for levels that have not been solved and exist within the consecutive failure limit
 
-    # Debug
-    if (time.time() - time_last_debug) < DEBUG_PERIOD:
-        pass
-    else:
-        time_last_debug = time.time()
-        print(debug())
-    
-    check_disk()
+        # Debug
+        if (time.time() - time_last_debug) < DEBUG_PERIOD:
+            pass
+        else:
+            time_last_debug = time.time()
+            print(debug())
+        
+        check_disk()
+except KeyboardInterrupt:
+    pass
 
 
 
