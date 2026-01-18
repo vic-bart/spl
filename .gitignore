@@ -1,8 +1,7 @@
-bench_mark/*
-**.dot
-**/cmd.txt
-**/*result.txt
-**/*result
-**/**.zip
+**/bench_mark
+**/result
 **/cbs
-**/solution.csv
+**.dot
+**.txt
+**.csv
+**.zip
