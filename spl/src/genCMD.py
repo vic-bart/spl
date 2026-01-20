@@ -81,7 +81,7 @@ for m in ML:
                 maxlen=len(f.read().strip().split("\n"))
 
             for k in range(1,min(400,maxlen)):
-                cmd=[
+                cmd=(
                     EXE,
                     "-m",fn_m,
                     "-a",fn_ins,
@@ -89,7 +89,7 @@ for m in ML:
                     "--outputPaths",f"{RS_FOLDER}{m}-{i_type}-scen-{i}-agents-{k}.txt",
                     "-k",k,
                     "-t",getTimeout(fn_m),
-                ]
+                )
                 cmds.append(cmd)
 
 with open(CMD_FILE,"w") as f:
