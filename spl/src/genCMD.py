@@ -48,7 +48,7 @@ CMD_FILE=sys.argv[1]
 # Global variables
 cmds=[]
 
-def getTimeout(fn_m):
+def get_timeout(fn_m):
     height = 0
     width = 0
 
@@ -88,7 +88,7 @@ for m in ML:
                     "-o",f"{RS_FOLDER}{m}-{i_type}-scen-{i}-agents-{k}.csv",
                     "--outputPaths",f"{RS_FOLDER}{m}-{i_type}-scen-{i}-agents-{k}.txt",
                     "-k",k,
-                    "-t",getTimeout(fn_m),
+                    "-t",get_timeout(fn_m),
                 )
                 cmds.append(cmd)
 

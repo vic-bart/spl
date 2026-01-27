@@ -10,7 +10,7 @@ MOTION[(-1,0)]="d"
 SOLUTION_FN="solution"
 RESULT_FOLDER="../result/"
 DEBUG_PERIOD=10 # Seconds
-MAX_ENTRIES=50
+MAX_ENTRIES=float('inf')
 
 # Global variables
 time_last_debug=0
@@ -36,15 +36,20 @@ def convert_solution_string(solution:str="", encoded:bool=True) -> str:
 
     motions=[]
     prev_position=None
-    for match in pattern.finditer(solution):
-        position = match.group().split(",")
+    matches = pattern.findall(solution)
+    
+    if len(matches) == 1:
+        return ""
+
+    for match in matches:
+        position = match.split(",")
         if prev_position is not None:
             x = int(position[0])-prev_position[0]
             y = int(position[1])-prev_position[1]
             motions.append(MOTION[(x,y)])
         prev_position = (int(position[0]),int(position[1]))
     motion = "".join(motions)
-    
+
     if not encoded:
         return motion
     
@@ -58,7 +63,7 @@ def convert_solution_string(solution:str="", encoded:bool=True) -> str:
             else: # move != prev_move
                 repeated_move = "" if repeated_move == 1 else repeated_move
                 encoded_motions.append(f"{repeated_move}{prev_move}")
-                repeated_move=1
+                repeated_move = 1
         prev_move = move
     repeated_move = "" if repeated_move == 1 else repeated_move
     encoded_motions.append(f"{repeated_move}{prev_move}")
@@ -221,11 +226,12 @@ def create_solution_json() -> None:
                 time_last_debug = time.time()
                 print(f"ETA: {(((time_end-time_start)/debug_count)*(debug_total-debug_count))//60} minutes remaining. {debug_count}/{debug_total} solutions formatted.")
             #######
-
-    except:
+            
+    except KeyboardInterrupt:
         pass
 
     with open(f"{SOLUTION_FN}.json", "w") as f:
         json.dump(data, f, indent=2)
 
-create_solution_json()
+if __name__ == "__main__":
+    create_solution_json()
