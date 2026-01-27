@@ -1,4 +1,4 @@
-import subprocess,time,sys,requests,shutil,glob,enum
+import subprocess,time,sys,requests,shutil,enum
 
 # Global constants
 DISCORD_SERVER="***REMOVED***"
