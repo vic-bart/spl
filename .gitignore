@@ -3,6 +3,7 @@
 **/cbs*
 **/__pycache__
 **/empty-3-3
+**/venv
 **.dot
 **.txt
 **.csv

@@ -7,6 +7,12 @@ MOTION[(0,1)]="r"
 MOTION[(1,0)]="u"
 MOTION[(0,-1)]="l"
 MOTION[(-1,0)]="d"
+PLANVIZ_MOTION={}
+PLANVIZ_MOTION[(0,0)]="w"
+PLANVIZ_MOTION[(0,1)]="r"
+PLANVIZ_MOTION[(1,0)]="d"
+PLANVIZ_MOTION[(0,-1)]="l"
+PLANVIZ_MOTION[(-1,0)]="u"
 SOLUTION_FN="solution"
 RESULT_FOLDER="../result/"
 DEBUG_PERIOD=10 # Seconds
@@ -25,7 +31,7 @@ def get_result() -> list[str]:
         result.append(fn)
     return result
 
-def convert_solution_string(solution:str="", encoded:bool=True) -> str:
+def convert_solution_string(solution:str="", encoded:bool=True, planviz:bool=False) -> str:
     # (0,0) -> (0,1) -> (1,1) -> (2,1) -> (2,0) -> (2,0) -> (1,0)
     # drruwl
     # d2ruwl (if encoded)
@@ -46,7 +52,10 @@ def convert_solution_string(solution:str="", encoded:bool=True) -> str:
         if prev_position is not None:
             x = int(position[0])-prev_position[0]
             y = int(position[1])-prev_position[1]
-            motions.append(MOTION[(x,y)])
+            if planviz:
+                motions.append(PLANVIZ_MOTION[(x,y)])
+            else:
+                motions.append(MOTION[(x,y)])
         prev_position = (int(position[0]),int(position[1]))
     motion = "".join(motions)
 
@@ -71,7 +80,7 @@ def convert_solution_string(solution:str="", encoded:bool=True) -> str:
     
     return encoded_motion
 
-def create_solution_plan(fn:str) -> list[str]:
+def create_solution_plan(fn:str, encoded:bool=True, planviz:bool=False) -> list[str]:
     pattern = re.compile(r"""
         \(.+\)
     """, re.VERBOSE)
@@ -79,7 +88,9 @@ def create_solution_plan(fn:str) -> list[str]:
     with open(fn,'r') as f:
         for l in f:
             match = pattern.findall(l)
-            solutions.append(convert_solution_string(*match))
+            solution = convert_solution_string(*match, encoded=encoded, planviz=planviz)
+            if solution:
+                solutions.append(solution)
     return solutions
 
 def create_solution_csv() -> None:
@@ -108,7 +119,7 @@ def create_solution_csv() -> None:
                 scen_type = fn[-5]
                 type_id = fn[-3]
                 agent_count = fn[-1].split(".")[0]
-                lines.append(f'"{map_name}",{scen_type},{type_id},{agent_count},"{solution_plan}",{flip_up_down}')
+                lines.append(f'{map_name},{scen_type},{type_id},{agent_count},"{solution_plan}",{flip_up_down}')
 
             # Debug
             debug_count += 1
@@ -194,10 +205,16 @@ def create_solution_json() -> None:
     #######
 
     try:
-        for fn in result: # ../result/Berlin_1_256-even-scen-1-agents-2.txt
+        result = [
+            "../result/maze-32-32-4-even-scen-1-agents-1.txt",
+            "../result/maze-32-32-4-even-scen-1-agents-2.txt",
+            "../result/maze-32-32-4-even-scen-1-agents-3.txt",
+            "../result/maze-32-32-4-even-scen-1-agents-4.txt",
+        ]
+        for fn in result: # ../result/maze-32-32-4-even-scen-1-agents-3.txt
             is_txt = True if fn.split(".")[-1] == "txt" else False
             if is_txt:
-                solution_plan = "\n".join(create_solution_plan(fn))
+                solution_plan = "\n".join(create_solution_plan(fn, encoded=True, planviz=False))
                 if len(solution_plan) == 0:
                     continue
                 fn = fn.split("-")
@@ -233,5 +250,59 @@ def create_solution_json() -> None:
     with open(f"{SOLUTION_FN}.json", "w") as f:
         json.dump(data, f, indent=2)
 
+def create_solution_planviz() -> None:
+    result=get_result()
+    is_txt=False
+    lines=["map_name,scen_type,type_id,agents,lower_cost,solution_cost,solution_plan"]
+
+    # Debug
+    global time_last_debug
+    global time_start
+    global time_end
+    global debug_count
+    global debug_total
+    time_start = time.time()
+    debug_total = len(result)
+    #######
+
+    try:
+        for fn in result: # ../result/Berlin_1_256-even-scen-1-agents-2.txt
+            is_txt = True if fn.split(".")[-1] == "txt" else False
+            if is_txt:
+                solution_plan = "\n".join(create_solution_plan(fn))
+                fn = fn.split("-")
+                map_name = "-".join(fn[:-5]).split("/")[-1]
+                scen_type = fn[-5]
+                type_id = fn[-3]
+                agents = fn[-1].split(".")[0]
+
+                i = None                
+                with open(f"..{"-".join(fn).split(".")[-2]}.csv","r") as f:
+                    for l in f:
+                        l = l.split(",")
+                        if i is None:
+                            i = l.index("solution cost")
+                        else:
+                            solution_cost = l[i]
+
+                lines.append(f'{map_name},{scen_type},{type_id},{agents},{solution_cost},{solution_cost},"{solution_plan}"')
+
+            # Debug
+            debug_count += 1
+            time_end = time.time()
+            if (time.time() - time_last_debug) < DEBUG_PERIOD:
+                pass
+            else:
+                time_last_debug = time.time()
+                print(f"ETA: {(((time_end-time_start)/debug_count)*(debug_total-debug_count))//60} minutes remaining. {debug_count}/{debug_total} solutions formatted.")
+            #######
+
+    except:
+        pass
+
+    with open(f"{SOLUTION_FN}.csv","w") as f:
+        [print(l,file=f) for l in lines]
+
 if __name__ == "__main__":
     create_solution_json()
+    # create_solution_planviz()

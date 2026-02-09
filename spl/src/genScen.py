@@ -1,4 +1,4 @@
-import pathlib,math,random,debug,itertools,time
+import pathlib,math,random,debug,itertools,time,numpy
 
 # Global constants
 BENCH_MARK_FOLDER="../bench_mark/"
@@ -72,54 +72,136 @@ def create_scen() -> None:
     with open(scen_file, "w") as f:
         [print(l,file=f) for l in lines]
 
+def print_nested(xs):
+    size = int(math.sqrt(len(xs)))
+    string = ""
+    for i in range(size):
+        for j in range(size):
+            string += f"{str(xs[(i * size)+j])} "
+        string += "\n"
+    print(string)
+
+def rotate_90_anticlockwise(xs):
+    size = int(math.sqrt(len(xs)))
+    ys = [None] * len(xs)
+    i:int
+    j:int = 0
+    for col in range(size):
+        i = size - col - 1
+        for row in range(size):
+            ys[j] = xs[i]
+            i += size
+            j += 1
+    return tuple(ys)
+
+def rotate_90_clockwise(xs):
+    size = int(math.sqrt(len(xs)))
+    ys = [None] * len(xs)
+    i:int
+    j:int = 0
+    for col in range(size):
+        i = len(xs) + col - size
+        for row in range(size):
+            ys[j] = xs[i]
+            i -= size
+            j += 1
+    return tuple(ys)
+
+def swap(xs, i, j):
+    x = xs[i]
+    xs[i] = xs[j]
+    xs[j] = x
+
+def rotate_180(xs):
+    i:int = 0
+    j:int = len(xs) - 1
+    ys = list(xs)
+    for pixel in range(len(ys) // 2):
+        swap(ys, i, j)
+        i += 1
+        j -= 1
+    return tuple(ys)
+
+def flip(xs):
+    size = int(math.sqrt(len(xs)))
+    i:int = 0
+    j:int = len(xs) - size
+    ys = list(xs)
+    for row in range(size // 2):
+        for col in range(size):
+            swap(ys, i, j)
+            i += 1
+            j += 1
+        j -= 2 * size
+    return tuple(ys)
+
+def mirror(xs):
+    size = int(math.sqrt(len(xs)))
+    i:int
+    j:int
+    ys = list(xs)
+    for col in range(size // 2):
+        i = col
+        j = size - 1 - col
+        for row in range(size):
+            swap(ys, i, j)
+            i += size
+            j += size
+    return tuple(ys)
+
 if __name__ == "__main__":
     # create_scen()
     # debug.draw_paths(MAP_HEIGHT, MAP_WIDTH)
-    # vertices = (
-    #     (0,0), (1,0), (2,0), 
-    #     (0,1), (1,1), (2,1), 
-    #     (0,2), (1,2), (2,2)
-    # )
     vertices = (
         (0,0), (1,0), (2,0), 
         (0,1), (1,1), (2,1), 
-        (0,2), (1,2),
+        (0,2), (1,2), (2,2), 
     )
+    # vertices = (
+    #     'a', 'b', 'c',
+    # )
     perm=[]
     for v in itertools.permutations(vertices, None):
         perm.append(v)
     # print(perm)
-    # print(len(perm))
+    print(len(perm)) # 362,880
 
-    # Debug
-    time_start = time.time()
-    debug_total = math.comb(len(perm),2)
-    #######
+    non_trivial=[]
+    for p in perm:
+
+        # Remove trivial instance where source == target for any agent
+        if any(vertices[i] == p[i] for i in range(len(vertices))): # 133,496
+            continue
+
+        if rotate_90_clockwise(p) in non_trivial:
+            continue
+
+        if rotate_90_anticlockwise(p) in non_trivial:
+            continue
+
+        if rotate_180(p) in non_trivial:
+            continue
+
+        p = mirror(p)
+
+        if rotate_90_clockwise(p) in non_trivial:
+            continue
+
+        if rotate_90_anticlockwise(p) in non_trivial:
+            continue
+
+        if rotate_180(p) in non_trivial:
+            continue
+
+        non_trivial.append(p)
+
+    # print(non_trivial)
+    print(len(non_trivial)) # 52,231
 
     pairs=[]
-    trivial=False
-    try:
-        for p in itertools.combinations(perm, 2):
-            for v in range(len(p[0])):
-                if p[0][v] == p[1][v]:
-                    trivial = True
-                    break
-            if not trivial:
-                pairs.append(p)
-            trivial = False
-
-            # Debug
-            debug_count += 1
-            time_end = time.time()
-            if (time.time() - time_last_debug) < DEBUG_PERIOD:
-                pass
-            else:
-                time_last_debug = time.time()
-                print(f"ETA: {(((time_end-time_start)/debug_count)*(debug_total-debug_count))//60} minutes remaining. {debug_count}/{debug_total} solutions formatted.")
-            #######
-    except KeyboardInterrupt:
-        pass
-
+    for nt in non_trivial:
+        pairs.append((vertices, nt))
+    
     # print(pairs)
     print(len(pairs))
 
