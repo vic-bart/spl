@@ -241,6 +241,50 @@ def shrink_json():
     with open("./shrink2.json", "w") as f:
         json.dump(shrinked_data, f, indent=2)
 
+def create_mapf_visualiser_result(fn:str):
+    pattern = re.compile(r"""
+        \(.+\)
+    """, re.VERBOSE)
+    with open(fn,'r') as f:
+        lines = f.readlines()
+        matches=[pattern.findall(l)[0].split("->") for l in lines]
+    
+    # Correct coordinate system; (y,x) to (x,y)
+    for m in matches:
+        for i in range(len(m)):
+            coord = m[i].split("(")[-1].split(")")[0].split(",")
+            m[i] = f"({coord[1]},{coord[0]})"
+
+    planning_result=[]
+    for t in range(max([len(m) for m in matches])):
+        l=f"{t}:"
+        for m in matches:
+            try:
+                l += f"{m[t]},"
+            except IndexError:
+                l += f"{m[-1]},"
+        planning_result.append(l)
+    print(planning_result)
+    return planning_result
+
+def get_mapf_visualiser_results():
+    result=[
+        "./cbsh2-rtc-empty-3-3-random-2-agents-8.txt"
+    ]
+    # result=[]
+    # for fn in sorted(glob.glob(f"{RESULT_FOLDER}/*")):
+    #     result.append(fn)
+
+    try:
+        for fn in result:
+            planning_result = create_mapf_visualiser_result(fn)
+    except KeyboardInterrupt:
+        pass
+
+    with open(f"mapf-visualiser.txt","w") as f:
+        [print(l,file=f) for l in planning_result]
+
 if __name__ == "__main__":
     # get_solutions_with_malformed_paths(save=True)
-    shrink_json()
+    # shrink_json()
+    get_mapf_visualiser_results()
