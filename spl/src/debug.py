@@ -284,7 +284,43 @@ def get_mapf_visualiser_results():
     with open(f"mapf-visualiser.txt","w") as f:
         [print(l,file=f) for l in planning_result]
 
+def check_cost():
+    results=[]
+    for fn in sorted(glob.glob(f"{RESULT_FOLDER}/*")):
+        is_txt = True if fn.split(".")[-1] == "txt" else False
+        if is_txt:
+            results.append(fn)
+
+    RUNTIME_INDEX=0
+    SOLUTION_COST_INDEX=5
+    OPTIMAL_COST_INDEX=6
+    lines=[]
+    for fn in results:
+        fn = f"..{fn.split(".")[2]}.csv"
+        with open(fn,'r') as f:
+            filelines = f.readlines()
+            for i in range(-1, -len(filelines), -1):
+                result = filelines[i].split(",")
+                try:
+                    if int(float(result[RUNTIME_INDEX])) != 60 or int(float(result[RUNTIME_INDEX])) != 180:
+                        break
+                except ValueError as e:
+                    print(e)
+
+            if int(float(result[RUNTIME_INDEX])) == 60 or int(float(result[RUNTIME_INDEX])) == 180:
+                continue
+
+        if result[SOLUTION_COST_INDEX] > result[OPTIMAL_COST_INDEX]:
+            lines.append(f"{fn}: Solution >> ABOVE >> Optimal")
+        elif result[SOLUTION_COST_INDEX] < result[OPTIMAL_COST_INDEX]:
+            lines.append(f"{fn}: Solution << BELOW << Optimal")
+
+    with open("checked_costs.txt","w") as f:
+        [print(l,file=f) for l in lines]
+
+
 if __name__ == "__main__":
     # get_solutions_with_malformed_paths(save=True)
     # shrink_json()
-    get_mapf_visualiser_results()
+    # get_mapf_visualiser_results()
+    check_cost()
