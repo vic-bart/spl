@@ -166,11 +166,36 @@ if __name__ == "__main__":
     # print(perm)
     print(len(perm)) # 362,880
 
-    non_trivial=[]
-    for p in perm:
+    non_trivial=set()
+    trivial=set()
+    # try:
+    for p in perm[1:]: # Skip trivial instance where source == target for all agents
 
         # Remove trivial instance where source == target for any agent
-        if any(vertices[i] == p[i] for i in range(len(vertices))): # 133,496
+        if any(vertices[i] == p[i] for i in range(len(vertices))):
+            t = tuple(vertices[i] == p[i] for i in range(len(vertices)))
+            if rotate_90_clockwise(t) in trivial:
+                continue
+
+            if rotate_90_anticlockwise(t) in trivial:
+                continue
+
+            if rotate_180(t) in trivial:
+                continue
+
+            t = mirror(t)
+
+            if rotate_90_clockwise(t) in trivial:
+                continue
+
+            if rotate_90_anticlockwise(t) in trivial:
+                continue
+
+            if rotate_180(t) in trivial:
+                continue
+
+            trivial.add(t)
+            non_trivial.add(p)
             continue
 
         if rotate_90_clockwise(p) in non_trivial:
@@ -193,17 +218,18 @@ if __name__ == "__main__":
         if rotate_180(p) in non_trivial:
             continue
 
-        non_trivial.append(p)
+        non_trivial.add(p)
+    # except KeyboardInterrupt:
+    #     pass
 
-    # print(non_trivial)
-    print(len(non_trivial)) # 52,231
+    print(len(non_trivial)) # 65,090
+    print(len(trivial)) # 133
 
     pairs=[]
     for nt in non_trivial:
         pairs.append((vertices, nt))
     
     # print(pairs)
-    print(len(pairs))
 
 
 
