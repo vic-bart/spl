@@ -122,7 +122,7 @@ def create_scen() -> None:
     instances=get_instances_all()
 
     for type_id in range(len(instances)):
-        scen_file=f"./{MAP_NAME}/{MAP_NAME}-{scen_type}-{type_id}.scen"
+        scen_file=f"./{MAP_NAME}/{MAP_NAME}-{scen_type}-{type_id+1}.scen"
         lines=["version 1"]
         instance = instances[type_id]
         for i in range(len(instance[0])):

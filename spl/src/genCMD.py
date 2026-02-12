@@ -8,40 +8,41 @@ EXE="../../cbs"
 FN_FOLDER="../bench_mark/"
 RS_FOLDER="../result/"
 ML=[
-    "empty-8-8",
-    "Berlin_1_256",
-    "den520d",
-    "empty-8-8",
-    "lt_gallowstemplar_n",
-    "maze-32-32-2",
-    "Paris_1_256",
-    "random-64-64-20",
-    "warehouse-10-20-10-2-1",
-    "w_woundedcoast",
-    "Boston_0_256",
-    "empty-16-16",
-    "ht_chantry",
-    "maze-128-128-1",
-    "maze-32-32-4",
-    "random-32-32-10",
-    "room-32-32-4",
-    "warehouse-10-20-10-2-2",
-    "brc202d",
-    "empty-32-32",
-    "ht_mansion_n",
-    "maze-128-128-10",
-    "orz900d",
-    "random-32-32-20",
-    "room-64-64-16",
-    "warehouse-20-40-10-2-1",
-    "den312d",
-    "empty-48-48",
-    "lak303d",
-    "maze-128-128-2",
-    "ost003d",
-    "random-64-64-10",
-    "room-64-64-8",
-    "warehouse-20-40-10-2-2",
+    "empty-3-3",
+    # "empty-8-8",
+    # "Berlin_1_256",
+    # "den520d",
+    # "empty-8-8",
+    # "lt_gallowstemplar_n",
+    # "maze-32-32-2",
+    # "Paris_1_256",
+    # "random-64-64-20",
+    # "warehouse-10-20-10-2-1",
+    # "w_woundedcoast",
+    # "Boston_0_256",
+    # "empty-16-16",
+    # "ht_chantry",
+    # "maze-128-128-1",
+    # "maze-32-32-4",
+    # "random-32-32-10",
+    # "room-32-32-4",
+    # "warehouse-10-20-10-2-2",
+    # "brc202d",
+    # "empty-32-32",
+    # "ht_mansion_n",
+    # "maze-128-128-10",
+    # "orz900d",
+    # "random-32-32-20",
+    # "room-64-64-16",
+    # "warehouse-20-40-10-2-1",
+    # "den312d",
+    # "empty-48-48",
+    # "lak303d",
+    # "maze-128-128-2",
+    # "ost003d",
+    # "random-64-64-10",
+    # "room-64-64-8",
+    # "warehouse-20-40-10-2-2",
 ]
 CMD_FILE=sys.argv[1]
 
@@ -74,13 +75,15 @@ def get_timeout(fn_m):
 
 for m in ML:
     fn_m= f"{FN_FOLDER}{m}/{m}.map"
-    for i_type in ["random","even"]:
-        for i in range(1,26):
+    # for i_type in ["random","even"]:
+    for i_type in ["random"]:
+        # for i in range(1,26):
+        for i in range(1, 39631):
             fn_ins=f"{FN_FOLDER}{m}/{m}-{i_type}-{i}.scen"
             with open(fn_ins) as f:
                 maxlen=len(f.read().strip().split("\n"))
 
-            for k in range(1,min(400,maxlen)):
+            for k in range(1,min(400,maxlen-1)):
                 cmd=(
                     EXE,
                     "-m",fn_m,
