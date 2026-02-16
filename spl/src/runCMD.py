@@ -2,7 +2,7 @@ import subprocess,time,sys,requests,shutil,enum
 
 # Global constants
 DISCORD_SERVER="***REMOVED***"
-N=int(sys.argv[2])  # Max 8 because the bus only has ~8 data lines, so >8 processes means waiting on data lines to be free means the processes slow down x10000 ~ Andy
+N=int(sys.argv[2])  # Max 34 because >36 processes start waiting on data lines to be free, slowing them down x10000
 MAP_INDEX=2
 SCENARIO_INDEX=4
 AGENT_NUM_INDEX=10
@@ -19,14 +19,20 @@ class CMD_STATE(enum.Enum):
     WAITING=3
     IN_POOL=4
     DONE=5
-TIMEOUT: dict[int|int] = {} # map size -> timeout in seconds
-TIMEOUT[0] = 60 # <100x100 -> 60 seconds
-TIMEOUT[10000] = 180 # >100x100 -> 3 minutes
+CMD_INDEX=0
+CMD_STATE_INDEX=1
 
 # Global variables
-instances: dict[str|dict[int|list[str]]] = {} # dict[map] -> dict[k] -> dict[scenario] -> CMD_STATE
-is_level_in_pool: dict[str|dict[int|bool]] = {} # dict[map] -> dict[k] -> is level in pool
-highest_k_solved: dict[str|int] = {} # dict[map] -> k of highest level solved
+
+instances: dict[str|dict[int|dict[str|list[tuple[str], CMD_STATE]]]] = {} 
+# dict[map] -> dict[k] -> dict[scenario] -> list[cmd, CMD_STATE]
+
+is_level_in_pool: dict[str|dict[int|bool]] = {} 
+# dict[map] -> dict[k] -> is level in pool
+
+highest_k_solved: dict[str|int] = {} 
+# dict[map] -> k of highest level solved
+
 waiting_cmds = set()
 current_processes = {}
 current_maps = []
@@ -34,7 +40,10 @@ errors=[]
 no_solutions=[]
 
 time_last_debug=0
-time_start=time.time()
+time_start=0
+time_end=0
+debug_count=0
+debug_total=0
 
 def sendDiscord(msg) -> None:
     # This API limits messages to 2000 characters.
@@ -58,30 +67,30 @@ def sendDiscord(msg) -> None:
 def debug() -> str:
     s = ""
     for map_name, ks in instances.items():
-        s += f"{map_name.split('/')[2].upper()}\n"
-        for k, cmds in ks.items():
+        s += f"{map_name.upper()}\n"
+        for k, scens in ks.items():
             waiting = True
             failed = 0
             solved = 0
-            for _, state in cmds.items():
-                if state == CMD_STATE.SOLVED:
+            for _, (_, cmd_state) in scens.items():
+                if cmd_state == CMD_STATE.SOLVED:
                     solved += 1
-                if state != CMD_STATE.WAITING:
+                if cmd_state != CMD_STATE.WAITING:
                     waiting = False
-                if state == CMD_STATE.NO_SOLUTION:
+                if cmd_state == CMD_STATE.NO_SOLUTION:
                     failed += 1
             e = "⏳"
             if waiting:                 # All cmds waiting
                 e = "⏱️"
-            elif failed == len(cmds):   # All cmds found no solution
+            elif failed == len(scens):   # All cmds found no solution
                 e = "❌"
             elif solved > 0:            # At least one cmd solved
                 e = "✅"
 
             if failed > 0:
-                s += f"{k}={e} (({solved}+{failed})/{len(cmds)}), "
+                s += f"{k}={e} (({solved}+{failed})/{len(scens)}), "
             else:
-                s += f"{k}={e} ({solved}/{len(cmds)}), "
+                s += f"{k}={e} ({solved}/{len(scens)}), "
         s = f"{s[:-2]}\n\n"
     return s
 
@@ -91,16 +100,17 @@ def is_map_failed(map_name) -> bool:
     l = highest_k_solved[map_name]
     r = min(l + CONSECUTIVE_FAILURES, max(instances[map_name].keys()))
     for k in range(l + 1, r + 1):
-        for _, state in instances[map_name][k].items():
-            if state != CMD_STATE.NO_SOLUTION:
+        for _, (_, cmd_state) in instances[map_name][k].items():
+            if cmd_state != CMD_STATE.NO_SOLUTION:
                 return False
     return True
 
 def create_cmds() -> None:
     for data in CMDPOOL:
         cmd = tuple(data.strip().split(" "))
-        map_name = cmd[MAP_INDEX]
+        map_name = cmd[MAP_INDEX].split("/")[-2]
         k = int(cmd[AGENT_NUM_INDEX])
+        scen = cmd[SCENARIO_INDEX].split(map_name)[-1][1:-5]
 
         if map_name not in instances:
             instances[map_name] = {}
@@ -111,35 +121,11 @@ def create_cmds() -> None:
             instances[map_name][k] = {}
             is_level_in_pool[map_name][k] = False
 
-        if cmd not in instances[map_name][k]:
-            instances[map_name][k][cmd] = CMD_STATE.WAITING
+        if scen not in instances[map_name][k]:
+            instances[map_name][k][scen] = [cmd, CMD_STATE.WAITING]
 
     for map_name in instances.keys():
         highest_k_solved[map_name] = min(instances[map_name].keys())
-
-def getTimeout(fn_m):
-    height = 0
-    width = 0
-
-    try:
-        with open(fn_m,'r') as f:
-            for l in f:
-                if l.split()[0] == "height":
-                    height = int(l.split()[1])
-                elif l.split()[0] == "width":
-                    width = int(l.split()[1])
-                else:
-                    continue
-    except FileNotFoundError:
-        print(f"The file '{fn_m}' does not exist.")
-        return
-    
-    # For example, assume (height * width) = 10000
-    size = (height * width) + 1 # size = 10001
-    x = list(TIMEOUT.keys()) # [0, 10000]
-    x.append(size) # [0, 10000, 10001]
-    x.sort() # In cases where the size is below max(x)
-    return TIMEOUT[x[x.index(size)-1]]
 
 def update_cmds() -> None:
     was_csv = False
@@ -156,16 +142,7 @@ def update_cmds() -> None:
                     k = int(fn.split("agents-")[-1].split(".")[0])
                     scen = fn.split("/")[-1].split("scen-")
                     scen = f"{scen[0]}{scen[1].split('-')[0]}"
-                    cmd=(
-                        "../../cbs",
-                        "-m",map_name,
-                        "-a",f"../bench_mark/{m}/{scen}.scen",
-                        "-o",f"{fn.split('.txt')[0]}.csv",
-                        "--outputPaths",fn,
-                        "-k",str(k),
-                        "-t",f"{getTimeout(map_name)}",
-                    )
-                    instances[map_name][k][cmd] = CMD_STATE.DONE
+                    instances[map_name][k][scen][1] = CMD_STATE.DONE
                     highest_k_solved[map_name] = max(highest_k_solved[map_name], k)
                     
                 was_csv = True if fn.split(".")[-1] == "csv" else False
@@ -177,29 +154,26 @@ def create_pool() -> None:
         l = 1
         r = min(highest_k_solved[map_name] + CONSECUTIVE_FAILURES, max(instances[map_name].keys()))
         for k in range(l, r + 1):
-            for cmd in instances[map_name][k].keys():
-                if instances[map_name][k][cmd] == CMD_STATE.WAITING:
+            for scen, (cmd, cmd_state) in instances[map_name][k].items():
+                if cmd_state == CMD_STATE.WAITING:
                     waiting_cmds.update([cmd])
-                    instances[map_name][k][cmd] = CMD_STATE.IN_POOL
+                    instances[map_name][k][scen][CMD_STATE_INDEX] = CMD_STATE.IN_POOL
 
 def update_pool() -> None:
     for map_name in instances.keys():
-
         if highest_k_solved[map_name] == max(instances[map_name].keys()):
             continue
-
         l = highest_k_solved[map_name]
         r = min(l + CONSECUTIVE_FAILURES, max(instances[map_name].keys()))
         for k in range(l + 1, r + 1):
-            for cmd in instances[map_name][k].keys():
-                if instances[map_name][k][cmd] == CMD_STATE.WAITING:
+            for scen, (cmd, cmd_state) in instances[map_name][k].items():
+                if cmd_state == CMD_STATE.WAITING:
                     waiting_cmds.update([cmd])
-                    instances[map_name][k][cmd] = CMD_STATE.IN_POOL
+                    instances[map_name][k][scen][CMD_STATE_INDEX] = CMD_STATE.IN_POOL
 
 def run_pool() -> None:
     while len(current_processes) < N and waiting_cmds:
         cmd = waiting_cmds.pop()
-        # print("[RUN_CMD] Starting command", subprocess.list2cmdline(cmd))
         process = subprocess.Popen(cmd)
         current_processes[process.pid] = (process, cmd)
 
@@ -207,24 +181,24 @@ def check_pool() -> None:
     finished_pids = []
     for pid, (process, cmd) in current_processes.items():
         result = process.poll()
-        if result is not None:                      # Process has finished
-            map_name = cmd[MAP_INDEX]
+        if result is not None: # Process has finished
+
+            map_name = cmd[MAP_INDEX].split("/")[-2]
             k = int(cmd[AGENT_NUM_INDEX])
-            if result == 0:                         # Solved
-                instances[map_name][k][cmd] = CMD_STATE.SOLVED
+            scen = cmd[SCENARIO_INDEX].split(map_name)[-1][1:-5]
+
+            if result == 0: # Solved
+                instances[map_name][k][scen][CMD_STATE_INDEX] = CMD_STATE.SOLVED
                 highest_k_solved[map_name] = max(highest_k_solved[map_name], k)
                 if (highest_k_solved[map_name] == max(instances[map_name].keys())) and (map_name in current_maps):
                     current_maps.remove(map_name)
-                # print("[RUN_CMD] Solved", subprocess.list2cmdline(current_processes[pid][1]))
-            elif result == 2:                       # Not solved
-                instances[map_name][k][cmd] = CMD_STATE.NO_SOLUTION
+            elif result == 2: # Not solved
+                instances[map_name][k][scen][CMD_STATE_INDEX] = CMD_STATE.NO_SOLUTION
                 no_solutions.append(' '.join(cmd))
-                # print("[RUN_CMD] Not solved", subprocess.list2cmdline(current_processes[pid][1]))
-            else:                                   # Bug
-                instances[map_name][k][cmd] = CMD_STATE.ERROR
+            else: # Bug
+                instances[map_name][k][scen][CMD_STATE_INDEX] = CMD_STATE.ERROR
                 errors.append(' '.join(cmd))
                 sendDiscord(f"BUG: !!!!!!!!!!!!!!!!! FUCK YOU!!!!!!!!! {subprocess.list2cmdline(cmd)}")
-                # print("[RUN_CMD] ERROR: Failed", subprocess.list2cmdline(cmd))
             finished_pids.append(pid)
     for pid in finished_pids:
         del current_processes[pid]
@@ -235,16 +209,21 @@ def check_disk() -> None:
         sendDiscord("Disk space exceeded!")
         raise Exception("Disk space exceeded!")
 
-
-
 print("Creating commands.")
 create_cmds()
-print("Updating commands.")
-update_cmds()
+
+# WIP (need to modify to access result folder directly, not txt file summary of 
+# directory)
+# print("Updating commands.")
+# update_cmds()
+
 print("Creating pool.")
 create_pool()
 
-print(debug())
+# Debug
+time_start = time.time()
+debug_total = len(CMDPOOL)
+#######
 
 # Loop
 try: 
@@ -261,25 +240,28 @@ try:
                 print(f"[RUN_CMD] FAILURE: {map_name} exceeded consecutive failures.")
 
         update_pool()   # Add new processes for levels that have not been solved and exist within the consecutive failure limit
+        check_disk()
 
         # Debug
+        time_end = time.time()
         if (time.time() - time_last_debug) < DEBUG_PERIOD:
             pass
         else:
+            debug_count = 0
+            for map_name in instances.keys():
+                for k in instances[map_name]:
+                    for scen, (cmd, cmd_state) in instances[map_name][k].items():
+                        debug_count = debug_count + 1 if cmd_state != CMD_STATE.WAITING else debug_count
             time_last_debug = time.time()
             print(debug())
-        
-        check_disk()
+            print(f"ETA: {(((time_end-time_start)/debug_count)*(debug_total-debug_count))//60} minutes remaining. {debug_count}/{debug_total} completed.")
+        #######
 except KeyboardInterrupt:
     pass
 
-
-
 # Debug
 time.sleep(1)   # Wait to allow process terminal output to finish
-print(debug())
 sendDiscord("Experiment finished without bug, hopefully.")
-print(time.time()-time_start)
 
 if errors:
     with open("errors.txt",'w') as f:

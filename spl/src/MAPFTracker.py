@@ -89,8 +89,7 @@ def create_solution_plan(fn:str, encoded:bool=True, planviz:bool=False) -> list[
         for l in f:
             match = pattern.findall(l)
             solution = convert_solution_string(*match, encoded=encoded, planviz=planviz)
-            if solution:
-                solutions.append(solution)
+            solutions.append(solution)
     return solutions
 
 def create_solution_csv() -> None:
