@@ -2,7 +2,8 @@ from matplotlib import lines
 import subprocess, os,glob, time,json,sys,requests,math
 
 # Global constants
-DISCORD_SERVER="***REMOVED***"
+with open("discord-key.txt","r") as f:
+    DISCORD_SERVER=f.read().strip()
 N=int(sys.argv[2])
 MAP_INDEX = 2
 SCENARIO_INDEX = 4
