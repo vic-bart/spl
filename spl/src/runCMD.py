@@ -1,7 +1,8 @@
 import subprocess,time,sys,requests,shutil,enum
 
 # Global constants
-DISCORD_SERVER="***REMOVED***"
+with open("discord-key.txt","r") as f:
+    DISCORD_SERVER=f.read().strip()
 N=int(sys.argv[2])  # Max 34 because >36 processes start waiting on data lines to be free, slowing them down x10000
 MAP_INDEX=2
 SCENARIO_INDEX=4
