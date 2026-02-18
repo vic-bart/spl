@@ -108,7 +108,7 @@ def is_map_failed(map_name) -> bool:
     return True
 
 def create_cmds() -> None:
-    prev_k = None
+    prev_k = 0
 
     for data in CMDPOOL:
         cmd = tuple(data.strip().split(" "))
