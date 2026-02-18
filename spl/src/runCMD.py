@@ -20,6 +20,7 @@ class CMD_STATE(enum.Enum):
     WAITING=3
     IN_POOL=4
     DONE=5
+    SKIP=6
 CMD_INDEX=0
 CMD_STATE_INDEX=1
 
@@ -107,6 +108,8 @@ def is_map_failed(map_name) -> bool:
     return True
 
 def create_cmds() -> None:
+    prev_k = None
+
     for data in CMDPOOL:
         cmd = tuple(data.strip().split(" "))
         map_name = cmd[MAP_INDEX].split("/")[-2]
@@ -122,8 +125,16 @@ def create_cmds() -> None:
             instances[map_name][k] = {}
             is_level_in_pool[map_name][k] = False
 
+            if k - prev_k > 1:
+                for k in range(prev_k+1, k):
+                    instances[map_name][k] = {}
+                    is_level_in_pool[map_name][k] = True
+                    instances[map_name][k][scen] = [(""), CMD_STATE.SKIP]
+
         if scen not in instances[map_name][k]:
             instances[map_name][k][scen] = [cmd, CMD_STATE.WAITING]
+
+        prev_k = k
 
     for map_name in instances.keys():
         highest_k_solved[map_name] = min(instances[map_name].keys())
@@ -237,7 +248,6 @@ try:
             if is_map_failed(map_name):
                 current_maps.remove(map_name)
                 highest_k_solved[map_name] = max(instances[map_name].keys()) # So further of its instances don't get added to waiting_cmds in update_pool()
-                # sendDiscord(f"FAILURE: {map_name} exceeded consecutive failures.")
                 print(f"[RUN_CMD] FAILURE: {map_name} exceeded consecutive failures.")
 
         update_pool()   # Add new processes for levels that have not been solved and exist within the consecutive failure limit

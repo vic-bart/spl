@@ -1,7 +1,7 @@
 import re,glob,time,json
 
 # Global constants
-RESULT_FOLDER="../result/"
+RESULT_FOLDER="../result-3-3/"
 DEBUG_PERIOD=10 # Seconds
 TIMEOUT: dict[int|int] = {} # map size -> timeout in seconds
 TIMEOUT[0] = 60 # <100x100 -> 60 seconds
@@ -318,9 +318,23 @@ def check_cost():
     with open("checked_costs.txt","w") as f:
         [print(l,file=f) for l in lines]
 
+def check_corrupted_csv():
+    results=[]
+    for fn in sorted(glob.glob(f"{RESULT_FOLDER}/*")):
+        is_csv = True if fn[-3:] == "csv" else False
+        if is_csv:
+            results.append(fn)
+
+    for fn in results:
+        with open(fn,'r') as f:
+            filelines = f.readlines()
+            if len(filelines) != 2:
+                print(len(filelines), fn)
+                exit(0)
 
 if __name__ == "__main__":
     # get_solutions_with_malformed_paths(save=True)
     # shrink_json()
     # get_mapf_visualiser_results()
-    check_cost()
+    # check_cost()
+    check_corrupted_csv()
