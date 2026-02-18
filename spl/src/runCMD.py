@@ -1,4 +1,4 @@
-import subprocess,time,sys,requests,shutil,enum
+import subprocess,time,sys,requests,shutil,enum,glob
 
 # Global constants
 with open("discord-key.txt","r") as f:
@@ -12,7 +12,7 @@ with open(sys.argv[1],"r") as f:
     CMDPOOL=[l for l in f]
 DEBUG_PERIOD=1800 # in seconds
 MINIMUM_DISK_SPACE=1073741824 # in B, 1 GiB
-RS_FILE="result.txt"
+RESULT_FOLDER="../result"
 class CMD_STATE(enum.Enum):
     SOLVED=0
     ERROR=1
@@ -137,28 +137,19 @@ def create_cmds() -> None:
 
         prev_k = k
 
-
 def update_cmds() -> None:
-    was_csv = False
-    is_txt = False
+    results=[]
+    for fn in sorted(glob.glob(f"{RESULT_FOLDER}/*")):
+        is_csv = True if fn[-3:] == "csv" else False
+        if is_csv:
+            results.append(fn)
 
-    try:
-        with open(RS_FILE,'r') as f:
-            for fn in f:
-                fn = fn.strip()
-                is_txt = True if fn.split(".")[-1] == "txt" else False
-                if was_csv and is_txt:
-                    m = fn.split("-random")[0].split("-even")[0].split("/")[-1]
-                    map_name = f"../bench_mark/{m}/{m}.map"
-                    k = int(fn.split("agents-")[-1].split(".")[0])
-                    scen = fn.split("/")[-1].split("scen-")
-                    scen = f"{scen[0]}{scen[1].split('-')[0]}"
-                    instances[map_name][k][scen][1] = CMD_STATE.DONE
-                    highest_k_solved[map_name] = max(highest_k_solved[map_name], k)
-                    
-                was_csv = True if fn.split(".")[-1] == "csv" else False
-    except FileNotFoundError:
-        print(f"Could not find file {RS_FILE}.")
+    for fn in results:
+        map_name = "-".join(fn.split("-")[0:-5]).split("/")[-1]
+        k = int(fn.split("agents-")[-1].split(".")[0])
+        scen = "".join("-".join(fn.split("-")[-5:-2]).split("scen-"))
+        instances[map_name][k][scen][1] = CMD_STATE.DONE
+        highest_k_solved[map_name] = max(highest_k_solved[map_name], k)
 
 def create_pool() -> None:
     for map_name in instances.keys():
@@ -220,13 +211,14 @@ def check_disk() -> None:
         sendDiscord("Disk space exceeded!")
         raise Exception("Disk space exceeded!")
 
+
+
+### MAIN ###
 print("Creating commands.")
 create_cmds()
 
-# WIP (need to modify to access result folder directly, not txt file summary of 
-# directory)
-# print("Updating commands.")
-# update_cmds()
+print("Updating commands.")
+update_cmds()
 
 print("Creating pool.")
 create_pool()
