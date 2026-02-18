@@ -120,6 +120,7 @@ def create_cmds() -> None:
             instances[map_name] = {}
             is_level_in_pool[map_name] = {}
             current_maps.append(map_name)
+            highest_k_solved[map_name] = k
 
         if k not in instances[map_name]:
             instances[map_name][k] = {}
@@ -136,8 +137,6 @@ def create_cmds() -> None:
 
         prev_k = k
 
-    for map_name in instances.keys():
-        highest_k_solved[map_name] = min(instances[map_name].keys())
 
 def update_cmds() -> None:
     was_csv = False
