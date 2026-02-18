@@ -249,11 +249,11 @@ try:
         if (time.time() - time_last_debug) < DEBUG_PERIOD:
             pass
         else:
-            debug_count = 0
+            debug_count = 1
             for map_name in instances.keys():
                 for k in instances[map_name]:
                     for scen, (cmd, cmd_state) in instances[map_name][k].items():
-                        debug_count = debug_count + 1 if cmd_state != CMD_STATE.WAITING else debug_count
+                        debug_count = debug_count + 1 if cmd_state in [CMD_STATE.SOLVED, CMD_STATE.NO_SOLUTION, CMD_STATE.ERROR] else debug_count
             time_last_debug = time.time()
             print(debug())
             print(f"ETA: {(((time_end-time_start)/debug_count)*(debug_total-debug_count))//60} minutes remaining. {debug_count}/{debug_total} completed.")
