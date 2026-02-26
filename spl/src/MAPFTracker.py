@@ -14,7 +14,7 @@ PLANVIZ_MOTION[(1,0)]="d"
 PLANVIZ_MOTION[(0,-1)]="l"
 PLANVIZ_MOTION[(-1,0)]="u"
 SOLUTION_FN="solution"
-RESULT_FOLDER="../result/"
+RESULT_FOLDER="../result-chbp-p/"
 DEBUG_PERIOD=10 # Seconds
 MAX_ENTRIES=float('inf')
 
@@ -204,12 +204,6 @@ def create_solution_json() -> None:
     #######
 
     try:
-        result = [
-            "../result/maze-32-32-4-even-scen-1-agents-1.txt",
-            "../result/maze-32-32-4-even-scen-1-agents-2.txt",
-            "../result/maze-32-32-4-even-scen-1-agents-3.txt",
-            "../result/maze-32-32-4-even-scen-1-agents-4.txt",
-        ]
         for fn in result: # ../result/maze-32-32-4-even-scen-1-agents-3.txt
             is_txt = True if fn.split(".")[-1] == "txt" else False
             if is_txt:

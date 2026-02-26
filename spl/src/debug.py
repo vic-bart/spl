@@ -1,7 +1,7 @@
-import re,glob,time,json
+import re,glob,time,json,pathlib,shutil
 
 # Global constants
-RESULT_FOLDER="../result-3-3/"
+RESULT_FOLDER="../result-3-3"
 DEBUG_PERIOD=10 # Seconds
 TIMEOUT: dict[int|int] = {} # map size -> timeout in seconds
 TIMEOUT[0] = 60 # <100x100 -> 60 seconds
@@ -332,9 +332,254 @@ def check_corrupted_csv():
                 print(len(filelines), fn)
                 exit(0)
 
+def verify_solution() -> None:
+    solutions=[]
+    with open(SOLUTION_FN,'r') as f:
+        for l in f:
+            solutions.append(l.split(","))
+
+    for solution in solutions[2:]:
+        map_name = solution[MAP_INDEX][1:-1]
+        scen_type = solution[SCEN_INDEX]
+        type_id = solution[TYPE_INDEX]
+        agent_count = int(solution[AGENT_INDEX])
+        solution_plans = solution[SOLUTION_INDEX].split("\\n")
+        bench_mark_fn = f"{BENCH_MARK_FOLDER}{map_name}/{map_name}-{scen_type}-{type_id}.scen"
+        with open(bench_mark_fn,'r') as f:
+            f = list(f)
+            for i in range(1, agent_count+1):
+                print(f[i].split())
+                exit(0)
+                # Verify path reaches target
+                # Verify no obstacle conflicts
+                # Verify no vertex conflicts
+                # Verify no swap conflicts
+                # Verify solution cost <= MAPF Tracker solution cost
+    
+def get_all_result() -> None:
+    rs=[]
+    for fn in sorted(glob.glob(f"{RS_FOLDER}/*")):
+        rs.append(fn)
+
+    with open(RS_FILE,"w") as f:
+        [print(l,file=f) for l in rs]
+
+def count_valid_result() -> None:
+    was_csv = False
+    is_txt = False
+    count = 0
+
+    try:
+        with open(RS_FILE,'r') as f:
+            for fn in f:
+                fn = fn.strip()
+                is_txt = True if fn.split(".")[-1] == "txt" else False
+                if was_csv and is_txt:
+                    count += 1
+                    
+                was_csv = True if fn.split(".")[-1] == "csv" else False
+    except FileNotFoundError:
+        print(f"Could not find file {RS_FILE}.")
+    
+    print(count)
+
+def count_csv_lines() -> None:
+    try:
+        with open(RS_FILE,'r') as f:
+            for fn in f:
+                fn = fn.strip()
+                is_csv = True if fn.split(".")[-1] == "csv" else False
+                if is_csv:
+                    with open(fn,'r') as csvf:
+                        lines = csvf.readlines()
+                        print(len(lines))
+    except FileNotFoundError:
+        print(f"Could not find file {RS_FILE}.")
+
+def get_solved_instances():
+    """
+    This only checks if there is a .csv and .txt file for an instance,
+    not if those files are valid.  
+    """
+    CMD_FILE=""
+    NEW_CMD_FILE=""
+    CSV_INDEX=6
+    TXT_INDEX=8
+    rs=[]
+    cmds=[]
+
+    with open("rs.txt",'r') as f:
+        for l in f:
+            rs.append(l.strip())
+
+    with open(CMD_FILE,'r') as f:
+        for l in f:
+            s = l.split(" ")
+            if s[CSV_INDEX] in rs and s[TXT_INDEX] in rs:
+                continue
+            cmds.append(l.strip())
+
+    with open(NEW_CMD_FILE,"w") as f:
+        [print(l,file=f) for l in cmds]
+
+def get_average_hle():
+    hle=[]
+    path = f"{RESULT_FOLDER}/*.csv"
+    for fn in glob.glob(path):
+        try:
+            with open(fn,'r') as f:
+                for l in f:
+                    try:
+                        hle.append(int(l.split(',')[1]))
+                    except:
+                        continue
+        except FileNotFoundError:
+            print(f"The file '{fn}' does not exist.")
+
+    print(sum(hle) / len(hle))
+    # 16 = 63066.083333333336
+    # 24 = 63708.89453125
+    # 32 = 63927.203125
+    # 33 = 63966.328125
+    # 34 = 64046.78125
+    # 35 = 64115.2421875
+    # 36 = 64132.10590277778 (max)
+    # 37 = 64123.146875
+    # 48 = 63777.99375
+    # 64 = 61635.5390625
+
+def get_min_failed_agents():
+    results=[]
+    for fn in sorted(glob.glob(f'{RESULT_FOLDER}/*')):
+        is_csv = True if fn[-3:] == 'csv' else False
+        if is_csv:
+            results.append(fn)
+
+    failed_agents=[]
+    failed=[]
+    for fn in results:
+        with open(fn,'r') as f:
+            filelines = f.readlines()
+            runtime = int(float(filelines[1].split(',')[0]))
+            if runtime >= 60:
+                failed.append(fn)
+                agent = int(fn.split('agents-')[-1].split('.')[0])
+                failed_agents.append(agent)
+
+    min_failed_agents = min(failed_agents)
+    print(min_failed_agents)
+
+    lines=[]
+    for fn in failed:
+        agent = int(fn.split('agents-')[-1].split('.')[0])
+        if agent == min_failed_agents:
+            lines.append(fn)
+
+    with open("debug.txt",'w') as f:
+        [f.write("%s\n" % l) for l in lines]
+
+def check_constraints():
+    results=[]
+    for fn in sorted(glob.glob(f"{RESULT_FOLDER}/*")):
+        is_trace = True if fn[-10:] == "trace.json" else False
+        if is_trace:
+            results.append(fn)
+
+    for fn in results:
+        lines=[]
+        with open(fn, 'r') as f:
+            trace = json.load(f)
+            for event in trace["events"]:
+                if not lines:
+                    lines.append(f"1-{event["type"]}")
+                    continue
+                if event["type"] == lines[-1].split("-")[-1]:
+                    lines[-1] = f"{int(lines[-1].split("-")[0])+1}-{event["type"]}"
+                    continue
+                if event["type"] != lines[-1].split("-")[-1]:
+                    lines.append(f"1-{event["type"]}")
+                    continue
+        instance = fn.split("/")[2].split(".")[0]
+        with open(f"{RESULT_FOLDER}/{instance}.trace.txt",'w') as f:
+            [f.write("%s\n" % l) for l in lines]
+
+def get_failed_and_successful_agents():
+    results=[]
+    for fn in sorted(glob.glob(f'{RESULT_FOLDER}/*')):
+        is_csv = True if fn[-3:] == 'csv' else False
+        if is_csv:
+            results.append(fn)
+
+    failed=[]
+    failed_weird=[]
+    succeeded=[]
+    succeeded_weird=[]
+    timeout=60
+
+    # Debug
+    global time_last_debug
+    global time_start
+    global time_end
+    global debug_count
+    global debug_total
+    time_start = time.time()
+    debug_total = len(results)
+    #######
+
+    try:
+        for fn in results:
+            with open(fn,'r') as f:
+                filelines = f.readlines()
+                runtime = int(float(filelines[1].split(',')[0]))
+                if runtime >= timeout:
+                    if pathlib.Path(f'{fn[:-3]}txt').is_file():
+                        print("Failed instance has a path", fn)
+                        failed_weird.append(fn)
+                    failed.append(fn)
+                if runtime < timeout:
+                    if not pathlib.Path(f'{fn[:-3]}txt').is_file():
+                        print("Solved instance has no path", fn)
+                        succeeded_weird.append(fn)
+                    succeeded.append(fn)
+
+            # Debug
+            debug_count += 1
+            time_end = time.time()
+            if (time.time() - time_last_debug) < DEBUG_PERIOD:
+                pass
+            else:
+                time_last_debug = time.time()
+                print(f"ETA: {(((time_end-time_start)/debug_count)*(debug_total-debug_count))//60} minutes remaining. {debug_count}/{debug_total} processed.")
+            #######
+    except KeyboardInterrupt:
+        pass
+
+    pathlib.Path(f'{RESULT_FOLDER}-failed').mkdir(exist_ok=True)
+    for fn in failed:
+        shutil.copy(fn, f'{RESULT_FOLDER}-failed/{fn.split("/")[-1]}')
+
+    pathlib.Path(f'{RESULT_FOLDER}-failed-weird').mkdir(exist_ok=True)
+    for fn in failed_weird:
+        shutil.copy(fn, f'{RESULT_FOLDER}-failed-weird/{fn.split("/")[-1]}')
+        shutil.copy(fn, f'{RESULT_FOLDER}-failed-weird/{fn.split("/")[-1][:-3]}txt')
+
+    pathlib.Path(f'{RESULT_FOLDER}-succeeded').mkdir(exist_ok=True)
+    for fn in succeeded:
+        shutil.copy(fn, f'{RESULT_FOLDER}-succeeded/{fn.split("/")[-1]}')
+        shutil.copy(fn, f'{RESULT_FOLDER}-succeeded/{fn.split("/")[-1][:-3]}txt')
+
+    pathlib.Path(f'{RESULT_FOLDER}-succeeded-weird').mkdir(exist_ok=True)
+    for fn in succeeded_weird:
+        shutil.copy(fn, f'{RESULT_FOLDER}-succeeded-weird/{fn.split("/")[-1]}')
+
 if __name__ == "__main__":
     # get_solutions_with_malformed_paths(save=True)
     # shrink_json()
     # get_mapf_visualiser_results()
     # check_cost()
-    check_corrupted_csv()
+    # check_corrupted_csv()
+    # get_min_failed_agents()
+    # check_constraints()
+    get_failed_and_successful_agents()
+
+# ./cbs -m *.map -a *.scen -o *.csv --outputPaths *.txt -k * -t *
